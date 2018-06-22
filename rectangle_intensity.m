@@ -1,11 +1,14 @@
-function [xt_1, yt_1] = rectangle_intensity(dis_range,angle_range,x1_t,y1_t,x2_t,y2_t,I,w,track_line,line_num,j)
+function [xt_1, yt_1] = rectangle_intensity(dis_range,theta_range,x1_t,y1_t,x2_t,y2_t,I,w,track_line,line_num,j,xx,yy)
 x = track_line{(line_num(j)),1};
 y = track_line{(line_num(j)),2};
-x1 = x(end); y1 = y(end);
+x1 = x(end);  y1 = y(end);
+
+xx(find(yy <= 0 )) = []; yy(find(yy <= 0 )) = [];
+yy(find(xx <= 0 )) = []; xx(find(xx <= 0 )) = []; 
 % figure;imshow(I,[]);hold on
 % plot(y1,x1,'r*');
 % plot(y2_t,x2_t,'r*');
-% x1 = x(end); x2 = x2_t; y1 = y(end); y2 = y2_t; I = I2;
+
 [m,n] = size(I);
 
 if x1 < x2_t
@@ -158,7 +161,29 @@ else
         end
     end     
 end
-% 优化波峰点位置（先删除那些已被别的轨迹线末端占用的点）
+
+%% 波峰候选点优化（根据剩余的 xt_1 的点情况进行点补偿）
+% 删除被当前轨迹线末端占用的点
+if length(xt_1) > 0
+    dis = sqrt((xt_1 - x1).^2 + (yt_1 - y1).^2);
+    [~,a] = sort(dis);
+    xt_1 = xt_1(a); yt_1 = yt_1(a);
+    xt_1(1) = []; yt_1(1) = [];
+end
+% 删除 xt_1 中不可能是这根 track_out 轨迹线的候选点的点
+if length(xt_1) > 0 
+%     xx(find(yy <= 0 )) = []; yy(find(yy <= 0 )) = [];
+%     yy(find(xx <= 0 )) = []; xx(find(xx <= 0 )) = []; 
+    for i = 1:length(xt_1)
+        [max_p, label_1] = find_max_P_2(dis_range,45,xx(round(length(xx)/2)),yy(round(length(xx)/2)),x2_t,y2_t,xt_1(i),yt_1(i));
+        if max_p < 0 
+            xt_1(i) = -1; yt_1(i) = -1;
+        end
+    end
+    xt_1(find(xt_1 <= 0)) = [];
+    yt_1(find(yt_1 <= 0)) = [];
+end
+% 删除那些已被别的轨迹线末端占用的点
 if length(xt_1) > 1
     for i = 1:length(line_num)
         if i ~= j
@@ -176,67 +201,47 @@ if length(xt_1) > 1
     end
 end
 
-% 优化波峰点位置（根据剩余的 xt_1 的个数来分析是两点重合了还是漏检了）
-if length(xt_1) > 1 % 首先删除当前连线用 track_line 末端那个波峰点 
-    dis = sqrt((xt_1 - x1).^2 + (yt_1 - y1).^2); 
-    [~,a] = sort(dis);
-    xt_1 = xt_1(a); yt_1 = yt_1(a);
-    xt_1(1) = []; yt_1(1) = [];
-    [max_p, label_1] = find_max_P_2(dis_range,angle_range,x1,y1,x2_t,y2_t,xt_1,yt_1);
-    if max_p < 0 
-        xt_1 = []; yt_1 = [];
-    else
-        xt_1 = xt_1(label_1); yt_1 = yt_1(label_1);
+%% 根据剩余的 xt_1 的个数来进行点补偿
+% (x2_t,y2_t) 是这根 track_out 轨迹线的最后一个点
+if length(xt_1) > 0 
+    [max_p, label_1] = find_max_P_2(dis_range,theta_range,xx(round(length(xx)/2)),yy(round(length(xx)/2)),x2_t,y2_t,xt_1,yt_1);
+    xt_1 = xt_1(label_1); yt_1 = yt_1(label_1);
+else   % 没有合适的波峰值了，考虑这根 track_out 轨迹线在该帧图像上的灰度值灰度值分布情况
+    intensity = [];
+    for i = 1:length(xx)
+        intensity(i) = I(xx(i), yy(i));
     end
-else   % 波峰值只剩一个了
-    if  length(xt_1) == 1
-        x = track_line{(line_num(j)),1};
-        y = track_line{(line_num(j)),2};
-        xt_1 = round((xt_1(1)+x(end))/2); 
-        yt_1 = round((yt_1(1)+y(end))/2);
-%         [a,b] = find(x > 0 & y > 0);
-%         intensity = [];
-%         for i = 1:length(a)
-%             I = Image_data(:,:,i);
-%             intensity(i) =  I(x(b(i)),y(b(i)));
+    [a,b] = find(intensity(end) > intensity(1:end-1));
+    ratio = length(a)/length(xx);
+    if ratio > 0.6
+%         ratio_1 = I(xx(end),yy(end))/I(x1,y1);
+%         ratio_2 = I(x1,y1)/I(xx(end),yy(end));
+%         if ratio_2 >= 0.65 || ratio_1 >= 0.65
+%             xt_1 = x1; yt_1 = y1;
+%         else
+            xt_1 = xx(end); yt_1 = yy(end);
 %         end
-%     %     figure;plot(intensity,'r-');hold on; grid on;
-%         std_data = std(intensity(end-1:end));
-%         l = 0;
-%         for i = 2:length(intensity)-1
-%             std_d = std(intensity(end-i:end));
-%             if std_d > 2*std_data & intensity(end) > 1.1*intensity(end-i)
-%                 l = 1;
-%                 xt_1 = round((xt_1(1)+x(end))/2); 
-%                 yt_1 = round((yt_1(1)+y(end))/2);
-%                 break;
-%             end
-%         end
-%         if l == 0
-%             xt_1 = []; yt_1 = [];
-%         end
+    end
+end
+% 
+% % (x2_t, y2_t) 是这根 track_out 轨迹线的最后一个点
+% % (xt_1, yt_1) 是根据波峰情况筛选出的可能的候选点坐标
+% if  length(xt_1) == 1
+%     ratio_1 = I(x2_t,y2_t)/I(xt_1,yt_1);
+%     ratio_2 = I(xt_1,yt_1)/I(x2_t,y2_t);
+%     if ratio_1 < 0.5 || ratio_2 < 0.5
+%         ;
 %     else
-%         xt_1 = []; yt_1 = [];
-    end
-end
-
-
-if  length(xt_1) == 1
-    ratio_1 = I(x2_t,y2_t)/I(xt_1,yt_1);
-    ratio_2 = I(xt_1,yt_1)/I(x2_t,y2_t);
-    if ratio_1 < 0.5 || ratio_2 < 0.5
-        ;
-    else
-        dis = sqrt((xt_1 - x2_t)^2 + (yt_1 - y2_t)^2);
-        theta = calculate_theta_1(x1_t, x2_t, xt_1, y1_t, y2_t, yt_1);
-        P = calculate_P(dis_range, angle_range, dis, theta);
-        if P < 0 
-            xt_1 = x2_t;
-            yt_1 = y2_t;
-        end
-    end
-end
-
+%         dis = sqrt((xt_1 - x2_t)^2 + (yt_1 - y2_t)^2);
+%         theta = calculate_theta_1(x1_t, x2_t, xt_1, y1_t, y2_t, yt_1);
+%         P = calculate_P(dis_range, angle_range, dis, theta);
+%         if P < 0 
+%             xt_1 = x2_t;
+%             yt_1 = y2_t;
+%         end
+%     end
+% end
+% 
 
 
 
