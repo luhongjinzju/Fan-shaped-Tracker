@@ -5,8 +5,9 @@ P=[];
 for i = 1:max(m,n)
     dis = dis_all(i);
     theta = theta_all(i);
-    if dis <= dis_range & theta <= theta_all
-        P(i,1) = (1-theta*dis^2/(angle_range*dis_range^2)) * (1-dis/(dis_range+0.0000001))^2;
+    if dis <= dis_range & theta <= angle_range
+        P(i,1) = (1-theta*dis^2/(angle_range*dis_range^2))^0.3 * (1-dis/(dis_range+0.0000001))^0.3 * (1-theta/(angle_range+0.0000001))^0.3;
+%         P(i,1) = (1-theta*dis^2/(angle_range*dis_range^2))^0.3 * (1-dis/(dis_range+0.0000001))^0.3;
     else
         P(i,1) = -20;
     end
